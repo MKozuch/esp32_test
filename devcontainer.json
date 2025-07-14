@@ -1,0 +1,32 @@
+{
+	"name": "ESP-IDF",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"idf.showOnboardingOnInit": false,
+				"idf.toolsPath": "/opt/esp",
+				"idf.espIdfPath": "/opt/esp/idf",
+				"terminal.integrated.shell.linux": "/bin/bash"
+			},
+			"extensions": [
+				"espressif.esp-idf-extension",
+				"espressif.esp-idf-web",
+				"ms-vscode.cmake-tools",
+				"llvm-vs-code-extensions.vscode-clangd"
+			],
+	"userEnvProbe": "loginInteractiveShell"
+		}
+	},
+	"features": {
+		"ghcr.io/devcontainers-community/features/llvm": {}
+	},
+	"mounts": [
+		// "source=/dev/ttyACM0,target=/dev/ttyACM0,type=bind"
+	],
+	"runArgs": ["--device=/dev/ttyACM0"]
+}
+
+
