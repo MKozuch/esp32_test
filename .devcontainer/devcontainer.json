@@ -1,7 +1,10 @@
 {
 	"name": "ESP-IDF",
 	"build": {
-		"dockerfile": "Dockerfile"
+		"dockerfile": "Dockerfile",
+		"args": {
+			"IDF_INSTALL_TARGETS": "esp32s2"
+		}
 	},
 	"customizations": {
 		"vscode": {
@@ -17,17 +20,13 @@
 				"ms-vscode.cmake-tools",
 				"llvm-vs-code-extensions.vscode-clangd"
 			],
-
-	"userEnvProbe": "loginInteractiveShell"
+			"userEnvProbe": "loginInteractiveShell"
 		}
-	},
-	"features": {
-		"ghcr.io/devcontainers-community/features/llvm": {}
 	},
 	"mounts": [
 		// "source=/dev/ttyACM0,target=/dev/ttyACM0,type=bind"
 	],
-	"runArgs": ["--device=/dev/ttyACM0"]
+	"runArgs": [
+		"--device=/dev/ttyACM0"
+	]
 }
-
-

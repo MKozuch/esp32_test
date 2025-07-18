@@ -1,5 +1,4 @@
 {
-  "C_Cpp.intelliSenseEngine": "default",
   "idf.espIdfPath": "/opt/esp/idf",
   "idf.toolsPath": "/opt/esp",
   "idf.pythonInstallPath": "/usr/bin/python3",
@@ -10,5 +9,10 @@
     "IDF_TARGET": "esp32s2"
   },
   "idf.flashType": "UART",
-  "idf.port": "/dev/ttyACM0"
+  "idf.port": "/dev/ttyACM0",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=/opt/esp/tools/xtensa-esp-elf/esp-15.1.0_20250607/xtensa-esp-elf/bin/xtensa-esp32s2-elf-gcc",
+    "--compile-commands-dir=/workspaces/esp32_test/build"
+  ]
 }
