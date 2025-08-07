@@ -42,3 +42,4 @@
 
 .cache/
 build/
+managed_components/
