@@ -24,7 +24,6 @@
 		}
 	},
 	"mounts": [
-		// "source=/dev/ttyACM0,target=/dev/ttyACM0,type=bind"
 	],
 	"runArgs": [
 		"--device=/dev/ttyACM0"

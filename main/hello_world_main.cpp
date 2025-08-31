@@ -6,6 +6,9 @@
 
 #include "driver/gpio.h"
 
+#include "esp_err.h"
+#include "esp_event_base.h"
+#include "esp_netif_types.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
@@ -13,22 +16,30 @@
 
 #include "hal/gpio_types.h"
 #include "driver/gpio.h"
-#include "button_gpio.h"
 
+#include "esp_wifi.h"
+#include "esp_flash.h"
+#include "esp_netif.h"
+#include "esp_event.h"
 
-#include "iot_button.h"
 #include "portmacro.h"
+#include "mqtt_client.h"
 
 #include <cassert>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <esp_log.h>
 #include <initializer_list>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <utility>
+
+#include "WifiClient.hpp"
+#include "MqttClient.hpp"
 
 
 constexpr auto LED_BLUE_PIN = gpio_num_t::GPIO_NUM_4;
@@ -129,39 +140,9 @@ class LedControllerTask {
    QueueHandle_t queue_ = nullptr;
 };
 
-void on_button_short_press(void *arg,void *usr_data)
-{
-   std::cout << "Button short press detected!" << std::endl;
-   static int press_count = 0;
-   {
-      std::lock_guard lock(mtx);
-      press_count++;
 
-      LogicLevel button_state = (press_count % 2 == 0) ? LogicLevel::LOW : LogicLevel::HIGH;
 
-      fifo.push_back({.buttonState = button_state, .ledColor = LedColor::GREEN});
-   }
-}
 
-void on_button_long_press_down(void *arg,void *usr_data)
-{
-   std::cout << "Button long press detected!" << std::endl;
-
-   {
-      std::lock_guard lock(mtx);
-      fifo.push_back({.buttonState = LogicLevel::HIGH, .ledColor = LedColor::BLUE});
-   }
-}
-
-void on_button_long_press_up(void *arg, void *usr_data)
-{
-   std::cout << "Button long press released!" << std::endl;
-
-   {
-      std::lock_guard lock(mtx);
-      fifo.push_back({.buttonState = LogicLevel::LOW, .ledColor = LedColor::BLUE});
-   }
-}
 
 extern "C" {
 void app_main(void)
@@ -185,29 +166,9 @@ void app_main(void)
 
    const size_t stack_size = 1024;
 
-   // setup button (TODO: wrap with builder)
-   const button_config_t btn_cfg = {.long_press_time = 500, .short_press_time = 10};
-   const button_gpio_config_t btn_gpio_cfg = {
-       .gpio_num = 0,
-       .active_level = 0,
-       .enable_power_save = false,
-       .disable_pull = true};
-
-   button_handle_t gpio_btn = nullptr;
-   esp_err_t ret = ESP_OK;
-   ret = iot_button_new_gpio_device(&btn_cfg, &btn_gpio_cfg, &gpio_btn);
-   assert(ret == ESP_OK && "Failed to create GPIO button");
-
-   ret = iot_button_register_cb(gpio_btn, BUTTON_SINGLE_CLICK, nullptr, on_button_short_press, nullptr);
-   assert(ret == ESP_OK && "Failed to register short press callback");
-   ret = iot_button_register_cb(gpio_btn, BUTTON_LONG_PRESS_START, nullptr, on_button_long_press_down, nullptr);
-   assert(ret == ESP_OK && "Failed to register long press callback");
-   ret = iot_button_register_cb(gpio_btn, BUTTON_LONG_PRESS_UP, nullptr, on_button_long_press_up, nullptr);
-   assert(ret == ESP_OK && "Failed to register long press up callback");
-
    // setup tasks
    // auto buttonMonitorTask = ButtonMonitorTask(queue1);
-   auto ledControllerTask = LedControllerTask(queue1);
+   // auto ledControllerTask = LedControllerTask(queue1);
 
    //    xTaskCreate(
    //        &ButtonMonitorTask::public_run,
@@ -218,21 +179,62 @@ void app_main(void)
    //        &task_handle);
    //    assert(task_handle != nullptr && "Failed to create button monitor task");
 
-   xTaskCreate(
-       &LedControllerTask::public_run,
-       "LedTask",
-       stack_size,
-       &ledControllerTask,
-       10,
-       &task_handle);
-   assert(task_handle != nullptr && "Failed to create LED controller task");
+   // xTaskCreate(
+   //     &LedControllerTask::public_run,
+   //     "LedTask",
+   //     stack_size,
+   //     &ledControllerTask,
+   //     10,
+   //     &task_handle);
+   // assert(task_handle != nullptr && "Failed to create LED controller task");
+
+   auto wifi = WifiClient::get_instance();
+   wifi->init();
+
+   auto mqtt = MqttClient{};
+
+   auto init_mqtt_handler = [](void *event_handler_arg,
+                               esp_event_base_t event_base,
+                               int32_t event_id,
+                               void *event_data) {
+      if (event_base == IP_EVENT and event_id == IP_EVENT_STA_GOT_IP) {
+         auto mqtt = static_cast<MqttClient *>(event_handler_arg);
+         mqtt->init();
+      }
+   };
+
+   ESP_ERROR_CHECK(esp_event_handler_instance_register(
+       IP_EVENT,
+       IP_EVENT_STA_GOT_IP,
+       init_mqtt_handler,
+       &mqtt,
+       nullptr));
+
+
+   auto led_mqtt_handler = [](const std::string &topic, const std::string &data) {
+        if (topic == "led1") {
+           const bool is_on = (data == "1" or data == "on");
+           gpio_set_level(LED_RED_PIN, is_on ? 0 : 1);
+           
+
+           // TODO: echo
+           //static uint8_t cnt = 0;
+           //++cnt;
+           //const auto str = std::to_string(cnt);
+           //esp_mqtt_client_publish(client, "gauge", str.data(), str.size(), 0, 0);
+        }
+   };
+
+   mqtt.subscribe("led1", led_mqtt_handler);
 
    while (true) {
       vTaskDelay(2000 / portTICK_PERIOD_MS);
 
+      // TODO: soft restart on button to make sure order of initialization is correct
       // const auto button_state = static_cast<LogicLevel>(gpio_get_level(BUTTON_PIN));
       // std::cout << "Button state: " << (button_state == LogicLevel::HIGH ? "HIGH" : "LOW") << std::endl;
       std::cout << "Main thread ping" << std::endl;
+      wifi->log_status();
    }
 }
-}
+} // extern "C"
